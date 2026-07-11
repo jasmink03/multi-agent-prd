@@ -1,7 +1,7 @@
 import os
 from typing import Literal, Dict, Any, List
 from pydantic import BaseModel, Field
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from langchain_openai import ChatOpenAI
@@ -10,11 +10,16 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
+# ────────────────────────────────────────────────────────
+# 🛠️ ENHANCEMENT: READ ENV VARIABLES FROM YOUR .env FILE
+# ────────────────────────────────────────────────────────
+from dotenv import load_dotenv
+load_dotenv()  # This reads the .env file and loads GITHUB_TOKEN="xxxxxx" into os.environ
+
 # ==========================================
 # 1. CORE DEFINITIONS & CONFIGURATIONS
 # ==========================================
 
-# System Prompts from Week 1
 WRITER_SYSTEM_PROMPT = """You are a premier Product Management Writer Agent. 
 Transform messy notes into a deeply structured Markdown PRD containing exactly:
 1. Title, 2. Executive Summary, 3. User Stories, 4. Technical Specifications, 5. Edge Cases, 6. Success Metrics."""
@@ -22,13 +27,26 @@ Transform messy notes into a deeply structured Markdown PRD containing exactly:
 CRITIC_SYSTEM_PROMPT = """You are a strict QA Compliance Reviewer Agent. 
 Audit the provided PRD draft against our 6-section template rubric."""
 
+# Read token directly from the injected environment variables
+github_token = os.environ.get("GITHUB_TOKEN")
+
+if not github_token:
+    raise ValueError("System Missing Credentials: GITHUB_TOKEN not found in your environment or .env file.")
+
 # Initialize the Base LLM Engine
 llm = ChatOpenAI(
     model="gpt-4o",
-    api_key=os.environ.get("GITHUB_TOKEN"),
+    api_key=github_token,  # Plugs your token from the .env directly
     base_url="https://models.inference.ai.azure.com",
     temperature=0.2
 )
+
+# ==========================================
+# 2. WEEK 3: STRUCTURED OUTPUT & SCHEMAS
+# ==========================================
+# ... [Rest of your code remains completely identical below here] ...
+
+
 
 # ==========================================
 # 2. WEEK 3: STRUCTURED OUTPUT & SCHEMAS
