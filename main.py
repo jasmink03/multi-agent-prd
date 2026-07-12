@@ -41,11 +41,6 @@ llm = ChatOpenAI(
     temperature=0.2
 )
 
-# ==========================================
-# 2. WEEK 3: STRUCTURED OUTPUT & SCHEMAS
-# ==========================================
-# ... [Rest of your code remains completely identical below here] ...
-
 
 
 # ==========================================
