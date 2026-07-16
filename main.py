@@ -42,6 +42,7 @@ llm = ChatOpenAI(
 )
 
 #-------
+#-------
 
 # ==========================================
 # 2. WEEK 3: STRUCTURED OUTPUT & SCHEMAS
