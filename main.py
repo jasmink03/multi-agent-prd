@@ -3,6 +3,7 @@ from typing import Literal, Dict, Any, List
 from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, PlainTextResponse  # 💡 Added PlainTextResponse
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -22,7 +23,12 @@ load_dotenv()  # This reads the .env file and loads GITHUB_TOKEN="xxxxxx" into o
 
 WRITER_SYSTEM_PROMPT = """You are a premier Product Management Writer Agent. 
 Transform messy notes into a deeply structured Markdown PRD containing exactly:
-1. Title, 2. Executive Summary, 3. User Stories, 4. Technical Specifications, 5. Edge Cases, 6. Success Metrics."""
+1. Title, 2. Executive Summary, 3. User Stories, 4. Technical Specifications, 5. Edge Cases, 6. Success Metrics.
+
+CRITICAL FORMATTING RULES FOR READABILITY:
+- Insert exactly TWO empty lines (two blank carriage returns) before every major numbered heading (e.g., before "## 2. Executive Summary", "## 3. User Stories", etc.).
+- Ensure there is a blank line before and after every single bullet point, sub-heading, and horizontal rule (---).
+- This extra spacing is vital for the human reviewer to easily read the document in raw text format."""
 
 CRITIC_SYSTEM_PROMPT = """You are a strict QA Compliance Reviewer Agent. 
 Audit the provided PRD draft against our 6-section template rubric."""
@@ -40,9 +46,6 @@ llm = ChatOpenAI(
     base_url="https://models.inference.ai.azure.com",
     temperature=0.2
 )
-
-#-------
-#------
 
 # ==========================================
 # 2. WEEK 3: STRUCTURED OUTPUT & SCHEMAS
@@ -225,7 +228,94 @@ async def process_human_gate_response(payload: HumanApprovalPayload):
             "current_draft": final_output_state.get("current_draft")
         }
         
-    return {
-        "status": "Execution_Complete_Approved",
-        "final_product_requirement_document": final_output_state.get("current_draft")
-    }
+    # 💡 EDITED: If approved, return clean, raw Markdown directly
+    raw_markdown = final_output_state.get("current_draft", "")
+    return PlainTextResponse(content=raw_markdown, media_type="text/markdown")
+
+# ==========================================
+# 6. 🚀 BEAUTIFUL DOCUMENT VIEWER ENDPOINT
+# ==========================================
+
+@api_service.get("/api/v1/prd/view/{task_id}", response_class=HTMLResponse)
+async def view_document_pretty(task_id: str):
+    """Endpoint to render the document state as a clean, styled HTML page."""
+    config = {"configurable": {"thread_id": task_id}}
+    
+    current_snapshot = app.get_state(config)
+    if not current_snapshot.values:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"No document workflow state found for thread: {task_id}"
+        )
+        
+    # Retrieve the raw draft content
+    markdown_content = current_snapshot.values.get("current_draft", "")
+    if not markdown_content:
+        return "<h3>No draft has been generated yet for this Task ID.</h3>"
+        
+    # Safely escape markdown backticks for JavaScript template literals
+    escaped_markdown = markdown_content.replace("`", "\\`").replace("${", "\\${")
+    
+    # Render using GitHub-like markdown theme and Marked.js library
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>PRD Document Viewer - {task_id}</title>
+        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown.min.css">
+        <style>
+            body {{
+                box-sizing: border-box;
+                min-width: 200px;
+                max-width: 980px;
+                margin: 0 auto;
+                padding: 45px;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+                background-color: #f6f8fa;
+            }}
+            .markdown-body {{
+                box-sizing: border-box;
+                min-width: 200px;
+                max-width: 980px;
+                padding: 45px;
+                background-color: #ffffff;
+                border: 1px solid #d0d7de;
+                border-radius: 6px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            }}
+            @media (max-width: 767px) {{
+                body {{ padding: 15px; }}
+                .markdown-body {{ padding: 20px; }}
+            }}
+            .header-banner {{
+                margin-bottom: 20px;
+                padding: 12px;
+                background: #e6ffec;
+                border: 1px solid #acf2bd;
+                color: #1a7f37;
+                border-radius: 6px;
+                font-weight: 600;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="header-banner">
+            <span>📄 Viewing Saved Document State: <strong>{task_id}</strong></span>
+            <span>Score: {current_snapshot.values.get("critic_score", "N/A")}/100</span>
+        </div>
+        <article class="markdown-body" id="content">
+            <!-- Rendered markdown outputs here -->
+        </article>
+        <script>
+            document.getElementById('content').innerHTML = marked.parse(`{escaped_markdown}`);
+        </script>
+    </body>
+    </html>
+    """
+    return html_content
