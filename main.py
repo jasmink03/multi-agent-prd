@@ -319,3 +319,4 @@ async def view_document_pretty(task_id: str):
     </html>
     """
     return html_content
+    #-----------------
